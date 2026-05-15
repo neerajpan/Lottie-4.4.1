@@ -1,0 +1,23 @@
+[gd_scene load_steps=1 format=3]
+
+[node name="Demo3D" type="Node3D"]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
+current = true
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 4, 2)
+
+[node name="LottieBillboard" type="LottieAnimation3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0, 0)
+animation_path = "res://addons/godot_lottie/lotties/Godot funny.json"
+autoplay = true
+billboard = 1
+pixel_size = 0.003
+
+[node name="LottieFixed" type="LottieAnimation3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0, 0)
+animation_path = "res://addons/godot_lottie/lotties/Loader animation.json"
+autoplay = true
+pixel_size = 0.003

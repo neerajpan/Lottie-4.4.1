@@ -1,5 +1,6 @@
 #include "register_types.h"
 #include "lottie_animation.h"
+#include "lottie_animation_3d.h"
 #include "lottie_state_machine.h"
 
 #include <gdextension_interface.h>
@@ -14,6 +15,7 @@ void initialize_godot_lottie_module(ModuleInitializationLevel p_level) {
     }
 
     GDREGISTER_CLASS(LottieAnimation);
+    GDREGISTER_CLASS(LottieAnimation3D);
     GDREGISTER_CLASS(LottieAnimationState);
     GDREGISTER_CLASS(LottieStateTransition);
     GDREGISTER_CLASS(LottieStateMachine);

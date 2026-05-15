@@ -26,3 +26,4 @@ web.release.wasm32 = "res://addons/godot_lottie/bin/libgodot_lottie.web.template
 [icons]
 
 LottieAnimation = "res://addons/godot_lottie/icons/LottieAnimation.svg"
+LottieAnimation3D = "res://addons/godot_lottie/icons/LottieAnimation3D.svg"

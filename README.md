@@ -10,7 +10,8 @@ Note: this is an integration demo for personal use, so features may fail/be inco
 
 ## Features
 
-- **Ready-to-use LottieAnimation**: Drop-in Godot node for seamless Lottie integration in your scenes
+- **Ready-to-use nodes**: `LottieAnimation` (2D / `Node2D`) and `LottieAnimation3D` (3D / `Sprite3D`) — drop-in nodes for seamless Lottie integration in 2D, UI, and 3D scenes
+- **3D support**: `LottieAnimation3D` plays Lottie on a quad in 3D space with full `Sprite3D` features (billboard, alpha-cut, pixel size, double-sided, modulate)
 - **Hybrid CPU-GPU rendering**: ThorVG rasterizes vector data to RGBA8888 format in CPU memory, then converts to RGB texture for Godot's draw system
 - **Multi-threaded rendering**: Parallel processing using all available CPU cores
 - **SIMD optimizations**: AVX/SSE (x86/x64) or NEON (ARM) vectorization
@@ -189,10 +190,13 @@ This approach leverages ThorVG's optimized CPU vector processing while maintaini
 thorvg-godot/
 ├── build_thorvg.bat         # Windows build script
 ├── build_thorvg.sh          # Linux/macOS build script  
-├── src/                     # Extension source code
-│   ├── lottie_animation.cpp # Main animation class
-│   ├── lottie_animation.h   # Header file
-│   └── register_types.cpp   # Godot registration
+├── src/                       # Extension source code
+│   ├── lottie_animation.cpp    # 2D animation node (Node2D)
+│   ├── lottie_animation.h      # 2D animation header
+│   ├── lottie_animation_3d.cpp # 3D animation node (Sprite3D)
+│   ├── lottie_animation_3d.h   # 3D animation header
+│   ├── lottie_common.h         # Shared node-agnostic helpers
+│   └── register_types.cpp      # Godot registration
 ├── demo/                    # Example project with plugin
 │   └── addons/
 │       └── godot_lottie/    # ← Plugin folder to copy to your project
@@ -205,8 +209,12 @@ thorvg-godot/
 
 1. **Copy the plugin**: Copy the `demo/addons/godot_lottie/` folder to your Godot project's `addons/` directory
 2. **Enable the plugin**: Go to Project → Project Settings → Plugins and enable "Godot Lottie"
-3. **Add LottieAnimation node**: Add `LottieAnimation` nodes to your scene
-4. **Set animation path**: Set the `animation_path` property to your Lottie JSON file
+3. **Add a Lottie node**: Add a `LottieAnimation` node to a 2D/UI scene, or a `LottieAnimation3D` node to a 3D scene
+4. **Set animation path**: Set the `animation_path` property to your Lottie `.json` or `.lottie` file
+
+For 3D, `LottieAnimation3D` extends `Sprite3D`, so you also get `billboard`,
+`alpha_cut`, `pixel_size`, `double_sided` and the rest of the `Sprite3D`
+inspector for free. See [API.md](API.md) for the full 3D node reference.
 
 ## API Reference
 
