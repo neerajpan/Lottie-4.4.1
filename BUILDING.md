@@ -406,12 +406,50 @@ done
 
 Each `.so` should have at least 2 hits.
 
-### 4.6 Testing on a device
+### 4.6 The `libc++_shared.so` dependency
+
+NDK clang++ links the extension against `libc++_shared.so` by default. The
+extension's `DT_NEEDED` table references it, but Android does NOT ship that
+library as a system library — every APK that needs it must bundle it.
+
+The repo solves this by:
+
+1. Shipping the NDK's `libc++_shared.so` per ABI under
+   `demo/addons/godot_lottie/bin/android/<arch>/libc++_shared.so`.
+2. Declaring those files as dependencies in `godot_lottie.gdextension`:
+   ```ini
+   [dependencies]
+   android.debug.arm64 = {"res://addons/godot_lottie/bin/android/arm64/libc++_shared.so": ""}
+   android.release.arm64 = {"res://addons/godot_lottie/bin/android/arm64/libc++_shared.so": ""}
+   android.debug.x86_64 = {"res://addons/godot_lottie/bin/android/x86_64/libc++_shared.so": ""}
+   android.release.x86_64 = {"res://addons/godot_lottie/bin/android/x86_64/libc++_shared.so": ""}
+   ```
+
+When Godot exports for Android, it packages these into the APK's `lib/<abi>/`
+folder alongside the extension `.so`, and the dynamic linker resolves the
+dependency at `dlopen()` time.
+
+If you rebuild with a different NDK, **re-copy** the matching
+`libc++_shared.so` from
+`<NDK>/toolchains/llvm/prebuilt/<host>/sysroot/usr/lib/<triple>/libc++_shared.so`
+into the corresponding `bin/android/<arch>/` folder. The libc++ ABI is
+forward-compatible across NDK minor versions but you should keep them in
+sync to be safe.
+
+### 4.7 Testing on a device
 
 Push the demo project to a connected device via the Godot Android export
 template, or copy `demo/addons/godot_lottie/` into your existing Godot
 Android app's `addons/` and enable the plugin. Godot's runtime picks the
 correct `.so` per the device ABI via the `.gdextension` mappings.
+
+**Symptom-fix cheat sheet for Android load errors:**
+
+| dlopen error | Likely cause | Fix |
+|---|---|---|
+| `cannot locate symbol "_ZNSt6__ndk1..."` | `libc++_shared.so` missing in APK | Ensure `[dependencies]` in `.gdextension` references the per-ABI `libc++_shared.so` (see §4.6) |
+| `library "libgodot_lottie.android.template_release.arm64.so" not found` | Wrong ABI built, or `.gdextension` path mismatch | Build the matching ABI; check `.gdextension` `[libraries]` paths |
+| `cannot locate symbol "__cxa_throw"` | Built without `libc++abi` or wrong NDK | Use NDK r25+ |
 
 ---
 

@@ -23,6 +23,18 @@ android.release.arm64 = "res://addons/godot_lottie/bin/libgodot_lottie.android.t
 web.debug.wasm32 = "res://addons/godot_lottie/bin/libgodot_lottie.web.template_debug.wasm32.nothreads.wasm"
 web.release.wasm32 = "res://addons/godot_lottie/bin/libgodot_lottie.web.template_release.wasm32.nothreads.wasm"
 
+[dependencies]
+
+# Android: ship the NDK r26 libc++_shared.so per ABI. Our .so was built
+# against NDK clang++ which links against libc++_shared.so dynamically;
+# without these, dlopen() of the extension fails on device with
+# "cannot locate symbol _ZNSt6__ndk1...".
+
+android.debug.arm64 = {"res://addons/godot_lottie/bin/android/arm64/libc++_shared.so": ""}
+android.release.arm64 = {"res://addons/godot_lottie/bin/android/arm64/libc++_shared.so": ""}
+android.debug.x86_64 = {"res://addons/godot_lottie/bin/android/x86_64/libc++_shared.so": ""}
+android.release.x86_64 = {"res://addons/godot_lottie/bin/android/x86_64/libc++_shared.so": ""}
+
 [icons]
 
 LottieAnimation = "res://addons/godot_lottie/icons/LottieAnimation.svg"
