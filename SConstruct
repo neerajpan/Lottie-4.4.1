@@ -18,15 +18,22 @@ sources = Glob("src/*.cpp")
 # ThorVG integration - Platform-specific library handling
 env.Append(CPPPATH=["thirdparty/thorvg/inc"])
 
-# Determine ThorVG library location and linking method
+# Determine ThorVG library location and linking method.
+#
+# Android and Web are cross-compiled and each ABI/target needs its own
+# ThorVG build, so we look in arch-specific build directories for those.
+# Native desktop builds use the canonical `builddir`.
 if env["platform"] == "web":
     thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "build_wasm", "src")
+elif env["platform"] == "android":
+    arch = env.get("arch", "arm64")
+    thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "builddir_android_" + arch, "src")
 else:
     thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "builddir", "src")
 
 if os.path.exists(thorvg_lib_dir):
     env.Append(LIBPATH=[thorvg_lib_dir])
-    
+
     # Platform-specific library files
     platform_libs = {
         "windows": [
@@ -40,6 +47,12 @@ if os.path.exists(thorvg_lib_dir):
         "macos": [
             ("libthorvg.a", lambda: env.Append(LIBS=["thorvg"])),
             ("libthorvg.dylib", lambda: env.Append(LIBS=["thorvg"]))
+        ],
+        "android": [
+            ("libthorvg.a", lambda: env.Append(LIBS=["thorvg"]))
+        ],
+        "web": [
+            ("libthorvg.a", lambda: env.Append(LIBS=["thorvg"]))
         ]
     }
     

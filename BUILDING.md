@@ -18,7 +18,7 @@ The `.gdextension` file declares output paths for all of these:
 | Windows | `x86_64` (✅), `x86_32` (📋) | `thorvg-1.dll` (shared) | `.dll` |
 | Linux | `x86_64`, `arm64` (📋) | `libthorvg.a` (static) | `.so` |
 | macOS | Universal (`x86_64`+`arm64`) (📋) | `libthorvg.a` (static) | `.framework` |
-| Android | `arm64`, `x86_64` (📋) | `libthorvg.a` (static, cross-compiled) | `.so` |
+| Android | `arm64` (✅), `x86_64` (✅) | `libthorvg.a` (static, cross-compiled) | `.so` |
 | Web | `wasm32` nothreads (📋) | static (`build_wasm/`) | `.wasm` |
 
 ---
@@ -288,10 +288,15 @@ Replace `-` with a Developer ID for notarisation-ready signing.
 
 ---
 
-## 4. Android — 📋
+## 4. Android — ✅
 
-Android is **always** cross-compiled (from Linux, macOS, or Windows). You
-build one ThorVG per ABI and one extension per ABI.
+Verified end-to-end with **NDK r26.3.11579264** on a Windows host. All four
+target variants (`arm64`, `x86_64` × `template_debug`, `template_release`)
+build cleanly and contain the `LottieAnimation3D` symbols.
+
+Android is always cross-compiled. You need:
+- One ThorVG static library per ABI (`libthorvg.a`)
+- One extension `.so` per ABI per target
 
 ### 4.1 Install Android NDK
 
@@ -300,95 +305,113 @@ Get **Android NDK r25c or newer** (godot-cpp 4.3+ requires it):
 - Via Android Studio: SDK Manager → SDK Tools → NDK (Side by side)
 - Or standalone: https://developer.android.com/ndk/downloads
 
-Set the env var (path varies — adjust to where it lives on your machine):
+Set the environment variable to your NDK path:
 
 ```bash
-export ANDROID_NDK_ROOT="$HOME/Android/Sdk/ndk/25.2.9519653"
-# or Windows: set ANDROID_NDK_ROOT=C:\Users\you\AppData\Local\Android\Sdk\ndk\25.2.9519653
+# Linux/macOS
+export ANDROID_NDK_ROOT="$HOME/Android/Sdk/ndk/26.3.11579264"
+
+# Windows (cmd / batch)
+set "ANDROID_NDK_ROOT=C:\Android\sdk\ndk\26.3.11579264"
 ```
 
-### 4.2 Build ThorVG per ABI
+### 4.2 Edit the committed cross-files for your machine
 
-ThorVG doesn't ship Android cross-files, so write them. For **arm64-v8a**
-(`thirdparty/thorvg/cross-android-arm64.ini`):
+The repo ships two meson cross-files (they live at the repo root, not inside
+the `thirdparty/thorvg` submodule):
+
+- `thorvg-crossfiles/cross-android-arm64.ini`
+- `thorvg-crossfiles/cross-android-x86_64.ini`
+
+They are pre-configured for **NDK r26.3 on a Windows host**. Open each one and
+fix the four `[binaries]` paths to match your installation:
 
 ```ini
-[constants]
-ndk = '/full/path/to/android-ndk-r25c'
-api = '24'
-host_tag = 'linux-x86_64'   # or 'darwin-x86_64' / 'windows-x86_64'
-toolchain = ndk / 'toolchains/llvm/prebuilt' / host_tag
-
 [binaries]
-c       = toolchain / 'bin/aarch64-linux-android' + api + '-clang'
-cpp     = toolchain / 'bin/aarch64-linux-android' + api + '-clang++'
-ar      = toolchain / 'bin/llvm-ar'
-strip   = toolchain / 'bin/llvm-strip'
-pkg-config = 'false'
-
-[host_machine]
-system     = 'android'
-cpu_family = 'aarch64'
-cpu        = 'aarch64'
-endian     = 'little'
+c = '<NDK_ROOT>/toolchains/llvm/prebuilt/<HOST_TAG>/bin/<TARGET>-linux-android24-clang<.cmd>'
+cpp = '...<TARGET>-linux-android24-clang++<.cmd>'
+ar = '<NDK_ROOT>/toolchains/llvm/prebuilt/<HOST_TAG>/bin/llvm-ar<.exe>'
+strip = '<NDK_ROOT>/toolchains/llvm/prebuilt/<HOST_TAG>/bin/llvm-strip<.exe>'
 ```
 
-For **x86_64**: replace `aarch64-linux-android` with `x86_64-linux-android`
-and set `cpu_family = 'x86_64'`, `cpu = 'x86_64'`.
+- `<HOST_TAG>` = `windows-x86_64` / `linux-x86_64` / `darwin-x86_64`
+- Drop the `.cmd` / `.exe` suffixes on Linux and macOS hosts.
+- `24` is the API level (Godot 4.3+ Android minimum).
 
-Build:
+### 4.3 Build ThorVG for both ABIs
 
 ```bash
 cd thirdparty/thorvg
+
+# arm64-v8a -> thirdparty/thorvg/builddir_android_arm64/src/libthorvg.a
 meson setup builddir_android_arm64 \
-  --cross-file cross-android-arm64.ini \
-  -Dbuildtype=release -Ddefault_library=static \
+  --cross-file ../../thorvg-crossfiles/cross-android-arm64.ini \
+  -Dbuildtype=release -Doptimization=3 -Db_ndebug=true \
+  -Ddefault_library=static \
   -Dsimd=true -Dthreads=true -Dpartial=true \
-  -Dengines=sw -Dloaders=lottie -Dbindings=capi -Dexamples=false
+  -Dengines=sw -Dloaders=lottie -Dbindings=capi \
+  -Dexamples=false -Dtests=false \
+  --backend=ninja
 meson compile -C builddir_android_arm64
 
-# Repeat for x86_64
+# x86_64 -> thirdparty/thorvg/builddir_android_x86_64/src/libthorvg.a
 meson setup builddir_android_x86_64 \
-  --cross-file cross-android-x86_64.ini \
-  -Dbuildtype=release -Ddefault_library=static -Dsimd=true -Dthreads=true \
-  -Dpartial=true -Dengines=sw -Dloaders=lottie -Dbindings=capi -Dexamples=false
+  --cross-file ../../thorvg-crossfiles/cross-android-x86_64.ini \
+  -Dbuildtype=release -Doptimization=3 -Db_ndebug=true \
+  -Ddefault_library=static \
+  -Dsimd=true -Dthreads=true -Dpartial=true \
+  -Dengines=sw -Dloaders=lottie -Dbindings=capi \
+  -Dexamples=false -Dtests=false \
+  --backend=ninja
 meson compile -C builddir_android_x86_64
 ```
 
-### 4.3 Build the extension per ABI
+Each `libthorvg.a` is ~2 MB.
 
-Before each SCons run, copy/symlink the matching ABI build of ThorVG into
-`thirdparty/thorvg/builddir` (which is what SConstruct currently inspects):
+### 4.4 Build the extension for both ABIs
+
+The SConstruct in this repo already knows about Android — for
+`platform=android` it looks at `thirdparty/thorvg/builddir_android_<arch>/src/`
+automatically. No symlink juggling needed.
 
 ```bash
 # arm64-v8a
-rm -rf thirdparty/thorvg/builddir
-ln -s builddir_android_arm64 thirdparty/thorvg/builddir
-python3 -m SCons platform=android target=template_release arch=arm64 \
-  android_api_level=24 -j$(nproc)
+python -m SCons platform=android target=template_debug   arch=arm64 -jN
+python -m SCons platform=android target=template_release arch=arm64 -jN
 
 # x86_64
-rm -rf thirdparty/thorvg/builddir
-ln -s builddir_android_x86_64 thirdparty/thorvg/builddir
-python3 -m SCons platform=android target=template_release arch=x86_64 \
-  android_api_level=24 -j$(nproc)
+python -m SCons platform=android target=template_debug   arch=x86_64 -jN
+python -m SCons platform=android target=template_release arch=x86_64 -jN
 ```
 
-Output:
+Each `.so` is ~2 MB (debug) / 2 MB (release). Full set:
 
+- `demo/addons/godot_lottie/bin/libgodot_lottie.android.template_debug.arm64.so`
 - `demo/addons/godot_lottie/bin/libgodot_lottie.android.template_release.arm64.so`
+- `demo/addons/godot_lottie/bin/libgodot_lottie.android.template_debug.x86_64.so`
 - `demo/addons/godot_lottie/bin/libgodot_lottie.android.template_release.x86_64.so`
-- (and the corresponding `template_debug` files if you build that target)
 
-> **Suggested SConstruct improvement:** make `thorvg_lib_dir` configurable
-> via an env var or a `thorvg_builddir=…` SCons argument so you don't need
-> to swap symlinks between ABIs. This is in the BUILDING.md follow-up list.
+First build per target+arch combination is slow (~10 min: godot-cpp's ~1000
+wrapper classes recompile per Android variant). All four together ~40 min on
+a modern laptop.
 
-### 4.4 Testing on a device
+### 4.5 Verify the symbols are in each `.so`
+
+```bash
+for f in demo/addons/godot_lottie/bin/libgodot_lottie.android.*.so; do
+  printf "%-70s LottieAnimation3D count: %s\n" \
+    "$(basename $f)" "$(grep -aoc 'LottieAnimation3D' $f)"
+done
+```
+
+Each `.so` should have at least 2 hits.
+
+### 4.6 Testing on a device
 
 Push the demo project to a connected device via the Godot Android export
 template, or copy `demo/addons/godot_lottie/` into your existing Godot
-Android app's `addons/` and enable the plugin.
+Android app's `addons/` and enable the plugin. Godot's runtime picks the
+correct `.so` per the device ABI via the `.gdextension` mappings.
 
 ---
 
@@ -543,8 +566,10 @@ Godot picks the right `.dll` / `.so` / `.framework` / `.wasm` per the
 
 These would make multi-platform builds smoother:
 
-- **`thorvg_builddir=...` SCons argument** so each platform/arch points at
-  its own ThorVG output directory without symlink juggling.
+- **Per-arch ThorVG directories**: done — the SConstruct now uses
+  `builddir_android_<arch>` for Android and `build_wasm` for Web, so no
+  symlink juggling is needed. Could be extended to take a
+  `thorvg_builddir=...` SCons argument override.
 - **`build_thorvg_android.sh`** and **`build_thorvg_wasm.sh`** helper scripts
   (analogous to the existing `build_thorvg.sh` / `.bat`).
 - **CI workflow** (e.g. `.github/workflows/build.yml`) that builds all
