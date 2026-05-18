@@ -408,15 +408,34 @@ Each `.so` should have at least 2 hits.
 
 ### 4.6 The `libc++_shared.so` dependency
 
-NDK clang++ links the extension against `libc++_shared.so` by default. The
-extension's `DT_NEEDED` table references it, but Android does NOT ship that
-library as a system library — every APK that needs it must bundle it.
+NDK clang++ would normally link the extension against `libc++_shared.so`
+dynamically — but Android does NOT ship that library as a system lib, so
+without intervention `dlopen()` fails on device with
+`cannot locate symbol _ZNSt6__ndk1...`.
 
-The repo solves this by:
+This repo solves it **two ways**, and the SConstruct now applies the first
+one automatically:
 
-1. Shipping the NDK's `libc++_shared.so` per ABI under
+**Preferred: statically link libc++ into the extension.** SConstruct passes
+`-static-libstdc++` for `platform=android`, so any newly-built `.so` has
+libc++ embedded and no `DT_NEEDED [libc++_shared.so]` entry. Self-contained,
+nothing extra to package. Adds ~360 KB to each `.so`.
+
+**Fallback (legacy): bundle `libc++_shared.so` per ABI as a Godot dependency.**
+For any older `.so` in the repo that was built before the static-libc++ flag
+was added, the repo also ships the NDK's `libc++_shared.so` under
+`demo/addons/godot_lottie/bin/android/<arch>/` and references them via the
+`.gdextension` `[dependencies]` section. This keeps those older binaries
+loadable until they're rebuilt.
+
+If you rebuild every `.so` with the current SConstruct, you can drop the
+`[dependencies]` section and the bundled `libc++_shared.so` files entirely.
+
+Bundle setup (for the fallback path):
+
+1. Ship the NDK's `libc++_shared.so` per ABI under
    `demo/addons/godot_lottie/bin/android/<arch>/libc++_shared.so`.
-2. Declaring those files as dependencies in `godot_lottie.gdextension`:
+2. Declare those files as dependencies in `godot_lottie.gdextension`:
    ```ini
    [dependencies]
    android.debug.arm64 = {"res://addons/godot_lottie/bin/android/arm64/libc++_shared.so": ""}

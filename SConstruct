@@ -18,6 +18,13 @@ sources = Glob("src/*.cpp")
 # ThorVG integration - Platform-specific library handling
 env.Append(CPPPATH=["thirdparty/thorvg/inc"])
 
+# Android: statically link libc++ into the extension so the .so does not
+# require libc++_shared.so to be present alongside it at runtime. Otherwise
+# the dynamic linker fails with `cannot locate symbol _ZNSt6__ndk1...` when
+# Godot dlopen()s the extension on a device.
+if env["platform"] == "android":
+    env.Append(LINKFLAGS=["-static-libstdc++"])
+
 # Determine ThorVG library location and linking method.
 #
 # Android and Web are cross-compiled and each ABI/target needs its own
