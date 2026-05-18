@@ -340,10 +340,46 @@ strip = '<NDK_ROOT>/toolchains/llvm/prebuilt/<HOST_TAG>/bin/llvm-strip<.exe>'
 
 ### 4.3 Build ThorVG for both ABIs
 
+The repo ships helper scripts that take `ANDROID_NDK_ROOT` from the
+environment, auto-detect the host tag, and generate a meson cross-file per
+ABI inside each `builddir_android_<abi>/`:
+
+```bash
+# Linux / macOS host
+./build_thorvg_android.sh
+```
+
+```batch
+REM Windows host
+build_thorvg_android.bat
+```
+
+Environment knobs:
+
+| Var | Default | Meaning |
+|---|---|---|
+| `ANDROID_NDK_ROOT` | *(required)* | Path to the NDK install, e.g. `C:\Android\sdk\ndk\26.3.11579264` |
+| `API` | `24` | Android API level (Godot 4.3+ minimum) |
+| `ABIS` | `"arm64 x86_64"` | Space-separated ABI list to build |
+
+If you only need one ABI, pass it in:
+
+```bash
+ABIS=arm64 ./build_thorvg_android.sh        # Linux/macOS
+```
+
+```batch
+set "ABIS=arm64" & build_thorvg_android.bat  REM Windows
+```
+
+Each `libthorvg.a` is ~2 MB and lands at
+`thirdparty/thorvg/builddir_android_<abi>/src/libthorvg.a`.
+
+**Hand-rolling the build** (if you want to control more flags) is still an
+option — the scripts are thin wrappers around:
+
 ```bash
 cd thirdparty/thorvg
-
-# arm64-v8a -> thirdparty/thorvg/builddir_android_arm64/src/libthorvg.a
 meson setup builddir_android_arm64 \
   --cross-file ../../thorvg-crossfiles/cross-android-arm64.ini \
   -Dbuildtype=release -Doptimization=3 -Db_ndebug=true \
@@ -353,20 +389,12 @@ meson setup builddir_android_arm64 \
   -Dexamples=false -Dtests=false \
   --backend=ninja
 meson compile -C builddir_android_arm64
-
-# x86_64 -> thirdparty/thorvg/builddir_android_x86_64/src/libthorvg.a
-meson setup builddir_android_x86_64 \
-  --cross-file ../../thorvg-crossfiles/cross-android-x86_64.ini \
-  -Dbuildtype=release -Doptimization=3 -Db_ndebug=true \
-  -Ddefault_library=static \
-  -Dsimd=true -Dthreads=true -Dpartial=true \
-  -Dengines=sw -Dloaders=lottie -Dbindings=capi \
-  -Dexamples=false -Dtests=false \
-  --backend=ninja
-meson compile -C builddir_android_x86_64
 ```
 
-Each `libthorvg.a` is ~2 MB.
+The committed `thorvg-crossfiles/cross-android-*.ini` files are pre-populated
+with this machine's NDK path as a reference; the helper scripts generate
+their own fresh cross-files inside each build directory based on the current
+env vars, so the committed templates are only needed for hand-rolled builds.
 
 ### 4.4 Build the extension for both ABIs
 
@@ -627,8 +655,11 @@ These would make multi-platform builds smoother:
   `builddir_android_<arch>` for Android and `build_wasm` for Web, so no
   symlink juggling is needed. Could be extended to take a
   `thorvg_builddir=...` SCons argument override.
-- **`build_thorvg_android.sh`** and **`build_thorvg_wasm.sh`** helper scripts
-  (analogous to the existing `build_thorvg.sh` / `.bat`).
+- **`build_thorvg_android.sh` / `.bat`**: done — see §4.3. Take
+  `ANDROID_NDK_ROOT` from env, auto-detect host tag, loop over ABIs, and
+  generate fresh meson cross-files inside each `builddir_android_<abi>/`.
+- **`build_thorvg_wasm.sh`** helper script (analogous to the Android
+  helpers but for Emscripten).
 - **CI workflow** (e.g. `.github/workflows/build.yml`) that builds all
   platforms on every push and uploads the binaries as release artefacts.
 - Ship the per-platform meson cross-files (`cross-android-*.ini`,
