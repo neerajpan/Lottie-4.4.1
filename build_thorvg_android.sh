@@ -126,12 +126,16 @@ cpu = '$CPU_FAMILY'
 endian = 'little'
 EOF
 
+    # NOTE: -Dthreads=false on Android. ThorVG's threaded task scheduler
+    # interacts badly with the Android pthread runtime in some versions and
+    # causes hangs / crashes when the extension is loaded inside a Godot
+    # Android app. Without threads ThorVG renders single-threaded but stably.
     (cd "$THORVG_DIR" && \
         $MESON setup "$BUILDDIR_NAME" \
             --cross-file "$CROSSFILE" \
             -Dbuildtype=release -Doptimization=3 -Db_ndebug=true \
             -Ddefault_library=static \
-            -Dsimd=true -Dthreads=true -Dpartial=true \
+            -Dsimd=true -Dthreads=false -Dpartial=true \
             -Dengines=sw -Dloaders=lottie -Dbindings=capi \
             -Dexamples=false -Dtests=false \
             --backend=ninja && \

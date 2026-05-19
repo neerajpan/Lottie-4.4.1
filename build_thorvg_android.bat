@@ -157,12 +157,16 @@ REM specific to the Windows-prebuilt NDK toolchain.
 >> "%CROSSFILE%" echo cpu = '%CPU_FAMILY%'
 >> "%CROSSFILE%" echo endian = 'little'
 
+REM NOTE: -Dthreads=false on Android. ThorVG's threaded task scheduler
+REM interacts badly with the Android pthread runtime in some versions and
+REM causes hangs / crashes when the extension is loaded inside a Godot
+REM Android app. Without threads ThorVG renders single-threaded but stably.
 pushd "%THORVG_DIR%"
 %MESON% setup "%BUILDDIR_NAME%" ^
     --cross-file "%CROSSFILE%" ^
     -Dbuildtype=release -Doptimization=3 -Db_ndebug=true ^
     -Ddefault_library=static ^
-    -Dsimd=true -Dthreads=true -Dpartial=true ^
+    -Dsimd=true -Dthreads=false -Dpartial=true ^
     -Dengines=sw -Dloaders=lottie -Dbindings=capi ^
     -Dexamples=false -Dtests=false ^
     --backend=ninja

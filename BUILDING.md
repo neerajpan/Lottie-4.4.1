@@ -19,6 +19,7 @@ The `.gdextension` file declares output paths for all of these:
 | Linux | `x86_64`, `arm64` (📋) | `libthorvg.a` (static) | `.so` |
 | macOS | Universal (`x86_64`+`arm64`) (📋) | `libthorvg.a` (static) | `.framework` |
 | Android | `arm64` (✅), `x86_64` (✅) | `libthorvg.a` (static, cross-compiled) | `.so` |
+| **iOS** | **device `arm64`, simulator `arm64` + `x86_64` (📋)** | `libthorvg.a` (static, cross-compiled) | `.xcframework` |
 | Web | `wasm32` nothreads (📋) | static (`build_wasm/`) | `.wasm` |
 
 ---
@@ -375,6 +376,14 @@ set "ABIS=arm64" & build_thorvg_android.bat  REM Windows
 Each `libthorvg.a` is ~2 MB and lands at
 `thirdparty/thorvg/builddir_android_<abi>/src/libthorvg.a`.
 
+> **Important — Android requires `-Dthreads=false`.** ThorVG's threaded task
+> scheduler interacts badly with the Android pthread runtime in some
+> versions and causes hangs / crashes when the extension is loaded inside a
+> Godot Android app. The helper scripts already set this; if you hand-roll
+> the build, make sure to use `-Dthreads=false`. ThorVG then renders
+> single-threaded but stably — performance is still good for typical
+> Lottie sizes thanks to SIMD.
+
 **Hand-rolling the build** (if you want to control more flags) is still an
 option — the scripts are thin wrappers around:
 
@@ -384,7 +393,7 @@ meson setup builddir_android_arm64 \
   --cross-file ../../thorvg-crossfiles/cross-android-arm64.ini \
   -Dbuildtype=release -Doptimization=3 -Db_ndebug=true \
   -Ddefault_library=static \
-  -Dsimd=true -Dthreads=true -Dpartial=true \
+  -Dsimd=true -Dthreads=false -Dpartial=true \
   -Dengines=sw -Dloaders=lottie -Dbindings=capi \
   -Dexamples=false -Dtests=false \
   --backend=ninja
@@ -500,9 +509,129 @@ correct `.so` per the device ABI via the `.gdextension` mappings.
 
 ---
 
-## 5. Web (Emscripten / WASM) — 📋
+## 5. iOS — 📋
 
-### 5.1 Install Emscripten
+**Hard requirement: macOS host with Xcode installed.** iOS toolchain (clang +
+`xcrun` + `xcodebuild`) is Apple-only — you cannot build for iOS from a
+Windows or Linux machine without a Mac in the loop. The scripts and
+SConstruct support added here have been written following godot-cpp's
+`tools/ios.py` conventions but have **not** been compiled on this build
+machine (Windows host); please verify on a Mac.
+
+Output: a `.xcframework` bundle per target containing two slices —
+iOS device (arm64) and iOS Simulator (arm64 + x86_64 lipo'd together).
+
+### 5.1 Install prerequisites
+
+```bash
+# Xcode + Command Line Tools (do this in the App Store or via xcode-select).
+xcode-select --install
+
+# Confirm the toolchain is reachable.
+xcrun --version
+xcrun --sdk iphoneos --show-sdk-path
+xcrun --sdk iphonesimulator --show-sdk-path
+xcodebuild -version
+
+# meson + ninja
+brew install meson ninja
+# or: pip3 install --user meson ninja scons
+```
+
+### 5.2 Build ThorVG for iOS (device + simulator)
+
+```bash
+# Builds three static libthorvg.a -- one per (arch, sdk) combination:
+#   thirdparty/thorvg/builddir_ios-arm64/src/libthorvg.a              (device)
+#   thirdparty/thorvg/builddir_ios-arm64-simulator/src/libthorvg.a    (Apple Silicon sim)
+#   thirdparty/thorvg/builddir_ios-x86_64-simulator/src/libthorvg.a   (Intel Mac sim)
+chmod +x build_thorvg_ios.sh
+./build_thorvg_ios.sh
+```
+
+The script auto-detects SDK paths via `xcrun` and generates a fresh meson
+cross-file per variant inside each `builddir_ios-*/.cross.ini`.
+
+Optional env knobs:
+
+| Var | Default | Meaning |
+|---|---|---|
+| `MIN_IOS` | `12.0` | Minimum iOS version target (matches godot-cpp default) |
+| `VARIANTS` | `"device sim-arm64 sim-x86_64"` | Subset to build; pass `"device"` only to skip simulator |
+
+> **Note:** like the Android build, the iOS ThorVG is compiled with
+> `-Dthreads=false`. Threads-off keeps the static library self-contained
+> and avoids potential issues with ThorVG's task scheduler inside an
+> embedded library on iOS. SIMD stays on.
+
+### 5.3 Build the extension `.xcframework`
+
+```bash
+chmod +x build_extension_ios.sh
+./build_extension_ios.sh
+```
+
+The script runs SCons three times per target (`template_debug`,
+`template_release`) — once each for device arm64, sim arm64, sim x86_64 —
+combines the simulator dylibs with `lipo`, then invokes
+`xcodebuild -create-xcframework` to produce:
+
+- `demo/addons/godot_lottie/bin/libgodot_lottie.ios.template_debug.xcframework/`
+- `demo/addons/godot_lottie/bin/libgodot_lottie.ios.template_release.xcframework/`
+
+These are what the `.gdextension` references for the iOS platform.
+
+Optional env knobs:
+
+| Var | Default | Meaning |
+|---|---|---|
+| `TARGETS` | `"template_debug template_release"` | Subset of build targets |
+| `VARIANTS` | `"device sim-arm64 sim-x86_64"` | Subset of iOS slices |
+
+### 5.4 Hand-rolled SCons invocations (for one-off builds)
+
+If you want to control SCons args directly (e.g. just build a single
+device-only slice):
+
+```bash
+# iOS device (arm64)
+python3 -m SCons platform=ios target=template_release arch=arm64 ios_simulator=no
+
+# iOS simulator -- Apple Silicon
+python3 -m SCons platform=ios target=template_release arch=arm64 ios_simulator=yes
+
+# iOS simulator -- Intel Mac
+python3 -m SCons platform=ios target=template_release arch=x86_64 ios_simulator=yes
+```
+
+godot-cpp's `tools/ios.py` sets `SHLIBSUFFIX=.dylib` and uses `xcrun` to
+find the right SDK at SCons-time.
+
+### 5.5 Testing on a device
+
+1. Open the demo project (or your own project that uses the addon) in
+   Godot 4.5+.
+2. *Project → Export → Add → iOS* — fill in the team identifier and
+   bundle id.
+3. Export to a folder. Godot generates an Xcode project that
+   references `libgodot_lottie.ios.template_release.xcframework` from the
+   addon's `bin/`.
+4. Open the generated `.xcodeproj` in Xcode, select a real device or
+   simulator, and Run.
+
+### 5.6 Common iOS load errors
+
+| Symptom | Cause / Fix |
+|---|---|
+| `dyld: Library not loaded: ... libgodot_lottie...` | The `.xcframework` slice for the active arch (device vs simulator) wasn't built. Re-run `./build_extension_ios.sh` with the appropriate `VARIANTS`. |
+| Xcode signing errors when running on device | The `.xcframework` itself doesn't need signing, but Godot's generated iOS project does. Set up a development team in Xcode. |
+| `Undefined symbols for architecture arm64` at link time | ThorVG wasn't built for that arch. Re-run `./build_thorvg_ios.sh`. |
+
+---
+
+## 6. Web (Emscripten / WASM) — 📋
+
+### 6.1 Install Emscripten
 
 ```bash
 git clone https://github.com/emscripten-core/emsdk.git
@@ -524,7 +653,7 @@ Godot 4.3+ Web exports use **wasm32 + no threads** (the SharedArrayBuffer
 COOP/COEP requirement is a pain), which matches the `.gdextension` entry
 (`web.template_release.wasm32.nothreads.wasm`).
 
-### 5.2 Build ThorVG for WASM
+### 6.2 Build ThorVG for WASM
 
 ThorVG ships an `emscripten` cross-file template; copy / adapt it. Sample
 `thirdparty/thorvg/cross-emscripten.ini`:
@@ -570,7 +699,7 @@ if env["platform"] == "web":
     thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "build_wasm", "src")
 ```
 
-### 5.3 Build the extension for Web
+### 6.3 Build the extension for Web
 
 ```bash
 python3 -m SCons platform=web target=template_debug   -j$(nproc)
@@ -584,7 +713,7 @@ Output:
 - `demo/addons/godot_lottie/bin/libgodot_lottie.web.template_debug.wasm32.nothreads.wasm`
 - `demo/addons/godot_lottie/bin/libgodot_lottie.web.template_release.wasm32.nothreads.wasm`
 
-### 5.4 Testing in the browser
+### 6.4 Testing in the browser
 
 Export the demo project from Godot as **Web** with **Threading: Disabled**.
 Serve the resulting HTML/JS/WASM bundle with any static server:
@@ -597,7 +726,7 @@ python3 -m http.server 8000
 
 ---
 
-## 6. Verifying the addon in Godot
+## 7. Verifying the addon in Godot
 
 After any platform build:
 
@@ -618,7 +747,7 @@ After any platform build:
 
 ---
 
-## 7. Packaging the addon
+## 8. Packaging the addon
 
 To ship the addon to other Godot projects:
 
@@ -633,7 +762,7 @@ Godot picks the right `.dll` / `.so` / `.framework` / `.wasm` per the
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Cause / Fix |
 |---|---|
@@ -647,7 +776,7 @@ Godot picks the right `.dll` / `.so` / `.framework` / `.wasm` per the
 
 ---
 
-## 9. Follow-up improvements to this repo (not done yet)
+## 10. Follow-up improvements to this repo (not done yet)
 
 These would make multi-platform builds smoother:
 

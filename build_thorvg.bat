@@ -37,15 +37,34 @@ if exist builddir (
     rmdir /s /q builddir
 )
 
-REM Detect CPU core count for parallel compilation
-for /f "tokens=2 delims==" %%i in ('wmic cpu get NumberOfLogicalProcessors /value ^| find "="') do set CORES=%%i
+REM Detect CPU core count for parallel compilation. NUMBER_OF_PROCESSORS is
+REM always set on Windows; wmic was deprecated/removed in recent Windows 11
+REM builds so we no longer rely on it.
+if defined NUMBER_OF_PROCESSORS (
+    set "CORES=%NUMBER_OF_PROCESSORS%"
+) else (
+    set "CORES=4"
+)
 
 REM Configure build with optimal settings for Lottie rendering
 echo Configuring ThorVG build with optimizations...
+REM -Ddefault_library=static so the extension .dll links ThorVG into itself
+REM instead of requiring thorvg-1.dll alongside. This also drops the
+REM transitive VCRUNTIME140_1.dll / MSVCP140.dll / VCOMP140.DLL dependencies
+REM that thorvg-1.dll otherwise brings in -- which is what made the
+REM extension fail to load in older Godot editors (e.g. 4.4.1) that ship
+REM an older bundled MSVC runtime.
+REM
+REM -Db_vscrt=mt forces ThorVG to use the static C runtime (/MT) so its
+REM objects can be linked into the extension .dll, which godot-cpp also
+REM builds with /MT. Without this flag meson defaults to /MD and the
+REM linker errors out with LNK2038 RuntimeLibrary mismatch.
 meson setup builddir ^
   -Dbuildtype=release ^
   -Doptimization=3 ^
   -Db_ndebug=true ^
+  -Ddefault_library=static ^
+  -Db_vscrt=mt ^
   -Dsimd=true ^
   -Dthreads=true ^
   -Dpartial=true ^
@@ -59,7 +78,6 @@ meson setup builddir ^
 
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Failed to configure build
-    pause
     exit /b 1
 )
 
@@ -72,7 +90,6 @@ if %ERRORLEVEL% NEQ 0 (
     echo ERROR: ThorVG build failed
     echo Check the output above for error details
     echo.
-    pause
     exit /b 1
 )
 
@@ -81,7 +98,7 @@ echo ========================================
 echo ThorVG build completed successfully
 echo.
 echo Output location: thirdparty\thorvg\builddir\src\
-echo Library file: thorvg-1.dll (shared library)
+echo Library file: thorvg.lib (static library, linked into the extension .dll)
 echo.
 echo Enabled optimizations:
 echo   - Multi-threading: Task scheduler with %CORES% workers
@@ -93,4 +110,3 @@ echo ========================================
 
 echo.
 echo Build script completed. Ready to build Godot extension.
-pause

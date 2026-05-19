@@ -17,6 +17,12 @@ sources = Glob("src/*.cpp")
 
 # ThorVG integration - Platform-specific library handling
 env.Append(CPPPATH=["thirdparty/thorvg/inc"])
+# TVG_STATIC tells thorvg.h to skip the __declspec(dllimport) decoration on
+# its public API symbols, which is required when linking against the static
+# libthorvg.a / thorvg.lib (otherwise MSVC emits LNK4217 and refuses to
+# link). Safe on non-Windows -- on Linux/macOS it just makes TVG_API empty,
+# which is what those builds already use.
+env.Append(CPPDEFINES=["TVG_STATIC"])
 
 # Android: statically link libc++ into the extension so the .so does not
 # require libc++_shared.so to be present alongside it at runtime. Otherwise
@@ -27,7 +33,7 @@ if env["platform"] == "android":
 
 # Determine ThorVG library location and linking method.
 #
-# Android and Web are cross-compiled and each ABI/target needs its own
+# Android, iOS and Web are cross-compiled and each ABI/target needs its own
 # ThorVG build, so we look in arch-specific build directories for those.
 # Native desktop builds use the canonical `builddir`.
 if env["platform"] == "web":
@@ -35,6 +41,15 @@ if env["platform"] == "web":
 elif env["platform"] == "android":
     arch = env.get("arch", "arm64")
     thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "builddir_android_" + arch, "src")
+elif env["platform"] == "ios":
+    # iOS has device (arm64) and simulator (arm64 / x86_64) builds.
+    # build_thorvg_ios.sh produces:
+    #   builddir_ios-arm64/                  (device)
+    #   builddir_ios-arm64-simulator/        (Apple Silicon Mac simulator)
+    #   builddir_ios-x86_64-simulator/       (Intel Mac simulator)
+    arch = env.get("arch", "arm64")
+    sim_suffix = "-simulator" if env.get("ios_simulator", False) else ""
+    thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "builddir_ios-" + arch + sim_suffix, "src")
 else:
     thorvg_lib_dir = os.path.join("thirdparty", "thorvg", "builddir", "src")
 
@@ -56,6 +71,9 @@ if os.path.exists(thorvg_lib_dir):
             ("libthorvg.dylib", lambda: env.Append(LIBS=["thorvg"]))
         ],
         "android": [
+            ("libthorvg.a", lambda: env.Append(LIBS=["thorvg"]))
+        ],
+        "ios": [
             ("libthorvg.a", lambda: env.Append(LIBS=["thorvg"]))
         ],
         "web": [
