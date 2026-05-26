@@ -31,13 +31,13 @@ env.Append(CPPPATH=["thirdparty/thorvg/inc"])
 # which is what those builds already use.
 env.Append(CPPDEFINES=["TVG_STATIC"])
 
-# Android: statically link libc++ and OpenMP into the extension so the .so
-# does not require libc++_shared.so or libomp.so at runtime.
-# ThorVG is built with -Dthreads=true (OpenMP) on Android for parallel
-# rendering. -static-openmp bakes libomp into the .so so dlopen() never
-# fails with "cannot locate symbol omp_set_num_threads".
+# Android: statically link libc++ to avoid requiring libc++_shared.so at runtime.
+# godot-cpp 4.4.1 with NDK r26+ references __libcpp_verbose_abort which is defined
+# as a weak symbol in the static libc++. We provide a stub fallback to ensure
+# the symbol is always resolved even if the NDK's static lib doesn't define it.
 if env["platform"] == "android":
-    env.Append(LINKFLAGS=["-static-libstdc++", "-fopenmp", "-static-openmp"])
+    env.Append(LINKFLAGS=["-static-libstdc++"])
+    env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
 
 
 # Determine ThorVG library location and linking method.
