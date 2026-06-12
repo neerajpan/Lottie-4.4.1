@@ -18,6 +18,11 @@ if env["platform"] == "linux":
     env.Append(CCFLAGS=["-fopenmp"])
     env.Append(LINKFLAGS=["-fopenmp"])
 
+# iOS: set @rpath-based install name so dyld can find the .dylib at runtime
+# Without this, the .dylib bakes in the build-time path which doesn't exist on device
+if env["platform"] == "ios":
+    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/libgodot_lottie.dylib"])
+
 # Source files
 env.Append(CPPPATH=["src/"])
 sources = Glob("src/*.cpp")
@@ -31,13 +36,10 @@ env.Append(CPPPATH=["thirdparty/thorvg/inc"])
 # which is what those builds already use.
 env.Append(CPPDEFINES=["TVG_STATIC"])
 
-# Android: statically link libc++ to avoid requiring libc++_shared.so at runtime.
-# godot-cpp 4.4.1 with NDK r26+ references __libcpp_verbose_abort which is defined
-# as a weak symbol in the static libc++. We provide a stub fallback to ensure
-# the symbol is always resolved even if the NDK's static lib doesn't define it.
+# Android: statically link libc++ into the extension so the .so does not
+# require libc++_shared.so to be present alongside it at runtime.
 if env["platform"] == "android":
     env.Append(LINKFLAGS=["-static-libstdc++"])
-    env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
 
 
 # Determine ThorVG library location and linking method.
