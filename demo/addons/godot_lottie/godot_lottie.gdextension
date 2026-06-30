@@ -8,8 +8,8 @@ reloadable = true
 
 macos.debug = "res://addons/godot_lottie/bin/libgodot_lottie.macos.template_debug.framework"
 macos.release = "res://addons/godot_lottie/bin/libgodot_lottie.macos.template_release.framework"
-ios.debug = "res://addons/godot_lottie/bin/libgodot_lottie.ios.template_debug.xcframework"
-ios.release = "res://addons/godot_lottie/bin/libgodot_lottie.ios.template_release.xcframework"
+ios.debug.arm64 = "res:/Frameworks/libgodot_lottie.ios.template_debug.arm64.dylib"
+ios.release.arm64 = "res://Frameworks/libgodot_lottie.ios.template_release.arm64.dylib"
 windows.debug.x86_32 = "res://addons/godot_lottie/bin/libgodot_lottie.windows.template_debug.x86_32.dll"
 windows.release.x86_32 = "res://addons/godot_lottie/bin/libgodot_lottie.windows.template_release.x86_32.dll"
 windows.debug.x86_64 = "res://addons/godot_lottie/bin/libgodot_lottie.windows.template_debug.x86_64.dll"
