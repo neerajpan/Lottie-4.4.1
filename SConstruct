@@ -18,6 +18,9 @@ if env["platform"] == "linux":
     env.Append(CCFLAGS=["-fopenmp"])
     env.Append(LINKFLAGS=["-fopenmp"])
 
+if env["platform"] == "ios":
+    dylib_name = "libgodot_lottie{}{}".format(env["suffix"], env["SHLIBSUFFIX"])
+    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/{}".format(dylib_name)])
 
 # Source files
 env.Append(CPPPATH=["src/"])
@@ -87,7 +90,7 @@ if os.path.exists(thorvg_lib_dir):
             ("libthorvg.a", lambda: env.Append(LIBS=["thorvg"]))
         ]
     }
-    
+
     # Try to find and link appropriate library for current platform
     lib_found = False
     if env["platform"] in platform_libs:
@@ -98,14 +101,14 @@ if os.path.exists(thorvg_lib_dir):
                 lib_found = True
                 print("Using ThorVG library: {}".format(lib_name))
                 break
-    
+
     if not lib_found:
         print("Warning: ThorVG library not found in {}".format(thorvg_lib_dir))
         print("Available files:", os.listdir(thorvg_lib_dir) if os.path.exists(thorvg_lib_dir) else "Directory not found")
 else:
     print("Error: ThorVG build directory not found: {}".format(thorvg_lib_dir))
     print("Please run the appropriate build script first:")
-    print("  Windows: build_thorvg.bat") 
+    print("  Windows: build_thorvg.bat")
     print("  Linux/macOS: ./build_thorvg.sh")
 
 # Output library name
@@ -114,15 +117,6 @@ if env["platform"] == "macos":
         "demo/addons/godot_lottie/bin/libgodot_lottie.{}.{}.framework/libgodot_lottie.{}.{}".format(
             env["platform"], env["target"], env["platform"], env["target"]
         ),
-        source=sources,
-    )
-elif env["platform"] == "ios":
-    # Build as a static library so the entry point symbol ends up in the app
-    # binary. Godot's iOS dlopen fallback (RTLD_SELF) then finds it at runtime
-    # without needing a working dlopen path for the xcframework.
-    # build_extension_ios.sh merges this .a with ThorVG's .a via libtool.
-    library = env.StaticLibrary(
-        "demo/addons/godot_lottie/bin/libgodot_lottie{}.a".format(env["suffix"]),
         source=sources,
     )
 else:

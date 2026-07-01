@@ -87,17 +87,17 @@ build_variant() {
     case "$VARIANT" in
         device)
             ARCH="arm64"; SIM_FLAG="ios_simulator=no"
-            OUT_NAME="libgodot_lottie.ios.$TARGET.arm64.a"
+            OUT_NAME="libgodot_lottie.ios.$TARGET.arm64.dylib"
             THORVG_BUILDDIR="$SCRIPT_DIR/thirdparty/thorvg/builddir_ios-arm64"
             ;;
         sim-arm64)
             ARCH="arm64"; SIM_FLAG="ios_simulator=yes"
-            OUT_NAME="libgodot_lottie.ios.$TARGET.arm64.simulator.a"
+            OUT_NAME="libgodot_lottie.ios.$TARGET.arm64.simulator.dylib"
             THORVG_BUILDDIR="$SCRIPT_DIR/thirdparty/thorvg/builddir_ios-arm64-simulator"
             ;;
         sim-x86_64)
             ARCH="x86_64"; SIM_FLAG="ios_simulator=yes"
-            OUT_NAME="libgodot_lottie.ios.$TARGET.x86_64.simulator.a"
+            OUT_NAME="libgodot_lottie.ios.$TARGET.x86_64.simulator.dylib"
             THORVG_BUILDDIR="$SCRIPT_DIR/thirdparty/thorvg/builddir_ios-x86_64-simulator"
             ;;
     esac
@@ -114,9 +114,9 @@ build_variant() {
     echo "bin/ contents after SCons:"
     ls -la "$BIN_DIR" 2>&1 | head -20
     local PRODUCED
-    PRODUCED="$(ls "$BIN_DIR"/libgodot_lottie.ios.${TARGET}*.a 2>/dev/null | head -1)"
+    PRODUCED="$(ls "$BIN_DIR"/libgodot_lottie.ios.${TARGET}*.dylib 2>/dev/null | head -1)"
     if [ -z "$PRODUCED" ] || [ ! -f "$PRODUCED" ]; then
-        echo "ERROR: SCons did not produce a .a for ios $TARGET $VARIANT"
+        echo "ERROR: SCons did not produce a .dylib for ios $TARGET $VARIANT"
         exit 1
     fi
 
@@ -158,18 +158,10 @@ build_variant() {
         exit 1
     fi
 
-    local _MERGE_TMP
-    _MERGE_TMP="$(mktemp -d)"
-    mkdir "$_MERGE_TMP/ext" "$_MERGE_TMP/gcpp" "$_MERGE_TMP/tvg"
-    (cd "$_MERGE_TMP/ext"  && ar -x "$PRODUCED")
-    (cd "$_MERGE_TMP/gcpp" && ar -x "$GODOT_CPP_LIB")
-    (cd "$_MERGE_TMP/tvg"  && ar -x "$THORVG_LIB")
-    # Prefix godot-cpp and ThorVG objects to prevent duplicate member names
-    for f in "$_MERGE_TMP/gcpp/"*.o; do [ -f "$f" ] && mv "$f" "${f%.o}_g.o"; done
-    for f in "$_MERGE_TMP/tvg/"*.o;  do [ -f "$f" ] && mv "$f" "${f%.o}_t.o"; done
-    find "$_MERGE_TMP" -name "*.o" | sort | xargs ar -crs "$INTERMEDIATES/$OUT_NAME"
-    ranlib "$INTERMEDIATES/$OUT_NAME"
-    rm -rf "$_MERGE_TMP"
+    mv "$PRODUCED" "$INTERMEDIATES/$OUT_NAME"
+    install_name_tool -id "@rpath/$OUT_NAME" "$INTERMEDIATES/$OUT_NAME"
+    echo "  -> $INTERMEDIATES/$OUT_NAME (install_name: @rpath/$OUT_NAME)"
+
     rm -f "$PRODUCED"
     echo "  -> $INTERMEDIATES/$OUT_NAME"
 }
@@ -184,13 +176,13 @@ done
 
 combine_simulator_libs() {
     local TARGET="$1"
-    local ARM_LIB="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.arm64.simulator.a"
-    local X86_LIB="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.x86_64.simulator.a"
-    local OUT="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.simulator.a"
+    local ARM_LIB="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.arm64.simulator.dylib"
+    local X86_LIB="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.x86_64.simulator.dylib"
+    local OUT="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.simulator.dylib"
 
     if [ -f "$ARM_LIB" ] && [ -f "$X86_LIB" ]; then
         echo
-        echo "=== lipo simulator .a files for $TARGET ==="
+        echo "=== lipo simulator .dylib files for $TARGET ==="
         lipo -create "$ARM_LIB" "$X86_LIB" -output "$OUT"
     elif [ -f "$ARM_LIB" ]; then
         cp "$ARM_LIB" "$OUT"
@@ -204,8 +196,8 @@ combine_simulator_libs() {
 
 build_xcframework() {
     local TARGET="$1"
-    local DEVICE_A="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.arm64.a"
-    local SIM_A="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.simulator.a"
+    local DEVICE_A="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.arm64.dylib"
+    local SIM_A="$INTERMEDIATES/libgodot_lottie.ios.$TARGET.simulator.dylib"
     local XCF="$BIN_DIR/libgodot_lottie.ios.$TARGET.xcframework"
 
     local ARGS=()
@@ -216,12 +208,12 @@ build_xcframework() {
         ARGS+=(-library "$SIM_A")
     fi
     if [ ${#ARGS[@]} -eq 0 ]; then
-        echo "WARN: no .a files for $TARGET, skipping xcframework"
+        echo "WARN: no .dylib files for $TARGET, skipping xcframework"
         return
     fi
 
     echo
-    echo "=== xcodebuild -create-xcframework ($TARGET, static) ==="
+    echo "=== xcodebuild -create-xcframework ($TARGET, dynamic) ==="
     rm -rf "$XCF"
     xcodebuild -create-xcframework "${ARGS[@]}" -output "$XCF"
     echo "  -> $XCF"
